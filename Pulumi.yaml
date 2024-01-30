@@ -1,0 +1,3 @@
+name: temporal-benchmarks-latency
+runtime: nodejs
+description: Temporal latency benchmarks
