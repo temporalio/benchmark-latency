@@ -2,7 +2,6 @@ import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import * as types from './config';
 import * as fs from 'fs';
-import { resolve } from 'path';
 
 export type Env = pulumi.Input<{ [key: string]: pulumi.Input<string> }>;
 
@@ -35,7 +34,7 @@ export const labelsFor = (component: string) => {
     }
 }
 
-const statefulset = (name: string, namespace: k8s.core.v1.Namespace, image: string, cmd: Array<string>, replicas: number, cpu: string, memory: string, tls: k8s.core.v1.Secret, opts?: pulumi.ComponentResourceOptions): k8s.apps.v1.StatefulSet => {
+const statefulset = (name: string, namespace: k8s.core.v1.Namespace, image: string, cmd: Array<string>, replicas: number, cpu: string, memory: string, tls: k8s.core.v1.Secret | undefined, opts?: pulumi.ComponentResourceOptions): k8s.apps.v1.StatefulSet => {
     const headlessService = new k8s.core.v1.Service(
         name,
         {
@@ -87,9 +86,7 @@ const statefulset = (name: string, namespace: k8s.core.v1.Namespace, image: stri
                                 ports: [
                                     { name: "metrics", containerPort: 8000 },
                                 ],
-                                volumeMounts: [
-                                    { name: "tls", mountPath: "/etc/temporal/tls" },
-                                ],
+                                volumeMounts: tls ? [ { name: "tls", mountPath: "/etc/temporal/tls" } ] : [],
                                 resources: {
                                     requests: {
                                         cpu: cpu,
@@ -98,9 +95,7 @@ const statefulset = (name: string, namespace: k8s.core.v1.Namespace, image: stri
                                 }
                             }
                         ],
-                        volumes: [
-                            { name: "tls", secret: { secretName: tls.metadata.name } },
-                        ],
+                        volumes: tls ? [ { name: "tls", secret: { secretName: tls.metadata.name } } ] : [],
                         restartPolicy: "Always",
                     },
                 },
@@ -120,20 +115,35 @@ export class Deployment extends pulumi.ComponentResource {
             { ...opts, parent: this },
         )
 
-        const tls = new k8s.core.v1.Secret(
-            "tls",
-            {
-                metadata: { namespace: namespace.metadata.name },
-                type: "kubernetes.io/tls",
-                stringData: {
-                    "tls.key": fs.readFileSync(resolve(__dirname, args.Temporal.TlsKey), 'utf8'),
-                    "tls.crt": fs.readFileSync(resolve(__dirname, args.Temporal.TlsCert), 'utf8'),
+        let tls: k8s.core.v1.Secret | undefined
+
+        if (args.Temporal.TlsKey) {
+            tls = new k8s.core.v1.Secret(
+                "tls",
+                {
+                    metadata: { namespace: namespace.metadata.name },
+                    type: "kubernetes.io/tls",
+                    stringData: {
+                        "tls.key": fs.readFileSync(args.Temporal.TlsKey, 'utf8'),
+                        "tls.crt": fs.readFileSync(args.Temporal.TlsCert, 'utf8'),
+                    },
                 },
-            },
-            { ...opts, parent: this },
-        )
+                { ...opts, parent: this },
+            )    
+        }
 
         const image = `temporaliotest/omes:${args.Version}`
+        
+        let tlsOptions: string[] = []
+        if (tls != undefined) {
+            tlsOptions = [
+                "--tls",
+                "--tls-cert-path",
+                "/etc/temporal/tls/tls.crt",
+                "--tls-key-path",
+                "/etc/temporal/tls/tls.key",
+            ]
+        }
 
         const worker = statefulset(
             "worker",
@@ -152,11 +162,7 @@ export class Deployment extends pulumi.ComponentResource {
                 "throughput_stress",
                 "--run-id",
                 args.Temporal.TaskQueue,
-                "--tls",
-                "--tls-cert-path",
-                "/etc/temporal/tls/tls.crt",
-                "--tls-key-path",
-                "/etc/temporal/tls/tls.key",
+                ...tlsOptions,
                 "--worker-prom-listen-address",
                 "0.0.0.0:8000",
                 "--worker-max-concurrent-activity-pollers",
@@ -190,11 +196,7 @@ export class Deployment extends pulumi.ComponentResource {
                 args.Scenario.ConcurrentWorkflows.toString(),
                 "--run-id",
                 args.Temporal.TaskQueue,
-                "--tls",
-                "--tls-cert-path",
-                "/etc/temporal/tls/tls.crt",
-                "--tls-key-path",
-                "/etc/temporal/tls/tls.key",
+                ...tlsOptions,
                 "--prom-listen-address",
                 "0.0.0.0:8000",
                 "--server-address",

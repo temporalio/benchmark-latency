@@ -7,19 +7,24 @@ import * as azuread from "@pulumi/azuread";
 import * as resources from "@pulumi/azure-native/resources";
 import * as containerservice from "@pulumi/azure-native/containerservice";
 
-import * as tls from "@pulumi/tls";
 import * as k8s from "@pulumi/kubernetes";
+import * as command from "@pulumi/command";
 import * as types from './config';
 
 import * as omes from './omes';
 
 import { dump } from 'js-yaml';
 import dedent from 'dedent';
+import { merge } from 'ts-deepmerge';
+
+import * as fs from 'fs';
 
 let config = new pulumi.Config();
 
 function createCluster(name: string, config: types.ClusterConfig): Cluster {
-    if (config.AWS != undefined) {
+    if (config.Local) {
+        return localCluster(name, config)
+    } else if (config.AWS) {
         return eksCluster(name, config)
     } else if (config.GCP) {
         return gksCluster(name, config)
@@ -33,6 +38,19 @@ function createCluster(name: string, config: types.ClusterConfig): Cluster {
 interface Cluster {
     Provider: k8s.Provider
     Kubeconfig: pulumi.Output<any>
+}
+
+function localCluster(name: string, config: types.ClusterConfig): Cluster {
+    if (config.Local == undefined) {
+        throw("localCluster needs Local configuration")
+    }
+
+    const kubeconfig = fs.readFileSync(config.Local.kubeconfig, 'utf8') 
+
+    return {
+        Provider: new k8s.Provider(name, { kubeconfig }),
+        Kubeconfig:  pulumi.output(kubeconfig),
+    }
 }
 
 function eksCluster(name: string, config: types.ClusterConfig): Cluster {
@@ -188,7 +206,7 @@ const monitoring = new k8s.helm.v3.Chart(
                 extraMetricRelabelingRules: dedent(`
                     rule {
                         source_labels = ["namespace"]
-                        regex = "^$|omes"
+                        regex = "^$|database|temporal|omes"
                         action = "keep"
                     }
 
@@ -222,7 +240,121 @@ const monitoring = new k8s.helm.v3.Chart(
     { provider: cluster.Provider }
 )
 
-const omesConfig = config.requireObject<omes.Config>('Omes');
-new omes.Deployment("omes", omesConfig, { provider: cluster.Provider, dependsOn: [monitoring] });
+const temporalConfig = config.requireObject<types.TemporalConfig>('Temporal');
+let installConfig = temporalConfig.SelfHosted
+if (installConfig) {
+    const db_namespace = new k8s.core.v1.Namespace(
+        'database',
+        { metadata: { name: 'database' } },
+        { provider: cluster.Provider },
+    )
 
-export const kubeconfig = cluster.Kubeconfig;
+
+    const postgres = new k8s.helm.v3.Chart(
+        'postgresql',
+        {
+            chart: "postgresql",
+            namespace: db_namespace.metadata.name,
+            fetchOpts:{
+                repo: "https://charts.bitnami.com/bitnami",
+            },
+            values: {
+                auth: {
+                    username: "temporal",
+                    password: "temporal",
+                },
+            }
+        },
+        { provider: cluster.Provider },
+    )
+
+    installConfig = merge(
+        {
+            cassandra: {
+                enabled: false
+            },
+            mysql: {
+                enabled: false
+            },
+            prometheus: {
+                enabled: false
+            },
+            grafana: {
+                enabled: false
+             },
+            elasticsearch: {
+                enabled: false
+            },
+            postgresql: {
+                enabled: true
+            },
+            server: {
+                config: {
+                    persistence: {
+                        default: {
+                            driver: "sql",
+                            sql: {
+                                driver: "postgres12",
+                                host: "postgresql.database",
+                                port: 5432,
+                                user: "temporal",
+                                password: "temporal",
+                                database: "temporal_persistence",
+                                maxConns: 20,
+                                maxConnLifetime: "1h",
+                            },
+                        },
+                        visibility: {
+                            driver: "sql",
+                            sql: {
+                                driver: "postgres12",
+                                host: "postgresql.database",
+                                port: 5432,
+                                user: "temporal",
+                                password: "temporal",
+                                database: "temporal_visibility",
+                                maxConns: 20,
+                                maxConnLifetime: "1h",
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        installConfig,
+    )
+
+    const temporalNamespace = new k8s.core.v1.Namespace(
+        'temporal',
+        { metadata: { name: 'temporal' } },
+        { provider: cluster.Provider },
+    )
+
+    const temporal = new k8s.helm.v3.Chart(
+        'temporal',
+        {
+            chart: "temporal",
+            namespace: temporalNamespace.metadata.name,
+            fetchOpts:{
+                repo: "https://go.temporal.io/helm-charts",
+            },
+            values: installConfig,
+        },
+        { provider: cluster.Provider },
+    )
+
+    const cmd = temporalNamespace.metadata.name.apply(
+        (ns) => `kubectl exec -n ${ns} deployment/temporal-admintools -- tctl --namespace ${temporalConfig.Namespace} namespace register`
+    )
+    const omesTemporalNamespace = new command.local.Command("namespace create", {
+        create: cmd,
+    }, { dependsOn: temporal });
+
+    const omesConfig = { ...config.requireObject<omes.Config>('Omes'), ...{ Temporal: temporalConfig } };
+    new omes.Deployment("omes", omesConfig, { provider: cluster.Provider, dependsOn: [monitoring, temporal, omesTemporalNamespace] });
+} else {
+    const omesConfig = { ...config.requireObject<omes.Config>('Omes'), ...{ Temporal: temporalConfig } };
+    new omes.Deployment("omes", omesConfig, { provider: cluster.Provider, dependsOn: [monitoring] });    
+}
+
+export const kubeconfig = cluster.Kubeconfig
