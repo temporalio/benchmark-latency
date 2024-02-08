@@ -339,22 +339,30 @@ if (installConfig) {
                 repo: "https://go.temporal.io/helm-charts",
             },
             values: installConfig,
+            transformations: [
+                (obj: any, opts: pulumi.CustomResourceOptions) => {
+                    if (obj.kind === "Deployment" && obj.apiVersion === "apps/v1") {
+                        if (obj.metadata && obj.metadata.name && obj.metadata.name === 'temporal-admintools') {
+                            const container = { ...obj.spec.template.spec.containers[0] }
+                            container.name = "create-namespace"
+                            container.livenessProbe = undefined
+                            container.command = ["bash", "-c", `temporal operator namespace describe ${temporalConfig.Namespace} || temporal operator namespace create ${temporalConfig.Namespace}`]
+                            obj.spec.template.spec.initContainers = [
+                                container
+                            ]
+                        }
+                    }
+                },
+            ]
         },
         { provider: cluster.Provider },
     )
 
-    const cmd = temporalNamespace.metadata.name.apply(
-        (ns) => `kubectl exec -n ${ns} deployment/temporal-admintools -- tctl --namespace ${temporalConfig.Namespace} namespace register`
-    )
-    const omesTemporalNamespace = new command.local.Command("namespace create", {
-        create: cmd,
-    }, { dependsOn: temporal });
-
     const omesConfig = { ...config.requireObject<omes.Config>('Omes'), ...{ Temporal: temporalConfig } };
-    new omes.Deployment("omes", omesConfig, { provider: cluster.Provider, dependsOn: [monitoring, temporal, omesTemporalNamespace] });
+    new omes.Deployment("omes", omesConfig, { provider: cluster.Provider, dependsOn: temporal.ready });
 } else {
     const omesConfig = { ...config.requireObject<omes.Config>('Omes'), ...{ Temporal: temporalConfig } };
-    new omes.Deployment("omes", omesConfig, { provider: cluster.Provider, dependsOn: [monitoring] });    
+    new omes.Deployment("omes", omesConfig, { provider: cluster.Provider });
 }
 
 export const kubeconfig = cluster.Kubeconfig
