@@ -81,6 +81,7 @@ const statefulset = (name: string, namespace: k8s.core.v1.Namespace, image: stri
                         containers: [
                             {
                                 image: image,
+                                imagePullPolicy: 'Always',
                                 name: name,
                                 command: cmd,
                                 ports: [
@@ -179,6 +180,7 @@ export class Deployment extends pulumi.ComponentResource {
             { ...opts, parent: this }
         )
 
+        // TODO: This should probably be a job as it only needs to run for a short duration.
         const runner = statefulset(
             "run-scenario",
             namespace,

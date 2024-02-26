@@ -319,6 +319,11 @@ if (installConfig) {
                         },
                     },
                 },
+                dynamicConfig: {
+                    "frontend.enableUpdateWorkflowExecution": [
+                        { value: true }
+                    ],
+                }
             },
         },
         installConfig,
@@ -355,7 +360,7 @@ if (installConfig) {
                 },
             ]
         },
-        { provider: cluster.Provider },
+        { provider: cluster.Provider, dependsOn: postgres.ready },
     )
 
     const omesConfig = { ...config.requireObject<omes.Config>('Omes'), ...{ Temporal: temporalConfig } };
