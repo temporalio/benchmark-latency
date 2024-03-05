@@ -180,7 +180,6 @@ export class Deployment extends pulumi.ComponentResource {
             { ...opts, parent: this }
         )
 
-        // TODO: This should probably be a job as it only needs to run for a short duration.
         const runner = statefulset(
             "run-scenario",
             namespace,
@@ -193,7 +192,7 @@ export class Deployment extends pulumi.ComponentResource {
                 "--scenario",
                 "throughput_stress",
                 "--duration",
-                "2h",
+                "1h",
                 "--max-concurrent",
                 args.Scenario.ConcurrentWorkflows.toString(),
                 "--run-id",
