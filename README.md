@@ -45,3 +45,16 @@ Each provider will have different methods for authentication, please see Pulumi'
 
 The provider accounts you use will need to have the required permissions to create a cluster using the providers' managed Kubernetes service, and then tear it down once finished. Pulumi will show relevant errors if some permissions are missing.
 
+### External Prometheus instance
+
+As the clusters used for the latency measurements are designed to be temporary (to keep costs down), it's expected that you will bring your own external Prometheus instance. For our testing we used Grafana Cloud, which includes a hosted Prometheus setup. Any metric system that can accept Prometheus remote-write protocol is fine. It should also not be difficult to replace the Prometheus agent setup that is installed into the cluster with some other metric system, if you prefer.
+
+Configuring the tool for your external metric system is covered below.
+
+## Configuring clusters
+
+To get repeatable measurements the tool will build a new cluster for each environment you'd like to measure. Once the benchmark has run you can use the tool to tear down the cluster and any associated resources it built.
+
+For each environment you'd like to test you will need to create a Pulumi [stack](https://www.pulumi.com/docs/concepts/stack/). Each stack will tell the tool which provider and region the test should be run in, and how many/which type of nodes to use for the cluster.
+
+This repo includes some example stack configuration files for you to edit as appropriate. You can find these templates in the [`examples/`](./examples) directory.

@@ -11,6 +11,7 @@ export interface AWSConfig {
     PublicSubnetIds: string[];
     PrivateSubnetIds: string[];
     AvailabilityZones: string[];
+    RdsSubnetGroupName: string;
 }
 
 export interface MonitoringConfig {

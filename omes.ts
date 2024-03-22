@@ -97,7 +97,6 @@ const statefulset = (name: string, namespace: k8s.core.v1.Namespace, image: stri
                             }
                         ],
                         volumes: tls ? [ { name: "tls", secret: { secretName: tls.metadata.name } } ] : [],
-                        restartPolicy: "OnFailure",
                     },
                 },
             },

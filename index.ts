@@ -8,7 +8,6 @@ import * as resources from "@pulumi/azure-native/resources";
 import * as containerservice from "@pulumi/azure-native/containerservice";
 
 import * as k8s from "@pulumi/kubernetes";
-import * as command from "@pulumi/command";
 import * as types from './config';
 
 import * as omes from './omes';
@@ -20,6 +19,7 @@ import { merge } from 'ts-deepmerge';
 import * as fs from 'fs';
 
 let config = new pulumi.Config();
+const temporalConfig = config.requireObject<types.TemporalConfig>('Temporal');
 
 function createCluster(name: string, config: types.ClusterConfig): Cluster {
     if (config.Local) {
@@ -38,6 +38,7 @@ function createCluster(name: string, config: types.ClusterConfig): Cluster {
 interface Cluster {
     Provider: k8s.Provider
     Kubeconfig: pulumi.Output<any>
+    SecurityGroup?: pulumi.Output<string>
 }
 
 function localCluster(name: string, config: types.ClusterConfig): Cluster {
@@ -76,9 +77,25 @@ function eksCluster(name: string, config: types.ClusterConfig): Cluster {
         maxSize: config.NodeCount,
     });
 
+    if (temporalConfig.SelfHosted) {
+        cluster.createNodeGroup(`${name}-temporal`, {
+            instanceType: "m5.2xlarge",
+            desiredCapacity: 1,
+            minSize: 1,
+            maxSize: 1,
+            labels: {
+                dedicated: "temporal",
+            },
+            taints: {
+                "dedicated": { value: "temporal", effect: "NoSchedule" }
+            }
+        })    
+    }
+
     return {
         Provider: cluster.provider,
         Kubeconfig: cluster.kubeconfig.apply((kc) => dump(kc)),
+        SecurityGroup: cluster.nodeSecurityGroup.id,
     }
 }
 
@@ -205,18 +222,6 @@ const monitoring = new k8s.helm.v3.Chart(
             metrics: {
                 extraMetricRelabelingRules: dedent(`
                     rule {
-                        source_labels = ["namespace"]
-                        regex = "^$|database|temporal|omes"
-                        action = "keep"
-                    }
-
-                    rule {
-                        source_labels = ["__name__"]
-                        regex = "temporal_.*_attempt_.*"
-                        action = "drop"
-                    }
-
-                    rule {
                         source_labels = ["pod"]
                         target_label = "instance"
                         action = "replace"
@@ -240,40 +245,47 @@ const monitoring = new k8s.helm.v3.Chart(
     { provider: cluster.Provider }
 )
 
-const temporalConfig = config.requireObject<types.TemporalConfig>('Temporal');
 let installConfig = temporalConfig.SelfHosted
 if (installConfig) {
-    const db_namespace = new k8s.core.v1.Namespace(
-        'database',
-        { metadata: { name: 'database' } },
-        { provider: cluster.Provider },
-    )
+    if (clusterConfig.AWS == undefined) {
+        throw new Error("Self-hosted setup is only supported on AWS currently")
+    }
 
+    const awsConfig = clusterConfig.AWS
 
-    const postgres = new k8s.helm.v3.Chart(
-        'postgresql',
+    const rdsSecurityGroup = new aws.ec2.SecurityGroup(pulumi.getStack() + "-rds", {
+        vpcId: awsConfig.VpcId,
+    });
+
+    new aws.ec2.SecurityGroupRule(pulumi.getStack() + "-rds", {
+        securityGroupId: rdsSecurityGroup.id,
+        type: 'ingress',
+        sourceSecurityGroupId: cluster.SecurityGroup,
+        protocol: "tcp",
+        fromPort: 3306,
+        toPort: 3306,
+    });
+
+    const rdsInstance = new aws.rds.Instance(
+        pulumi.getStack(),
         {
-            chart: "postgresql",
-            namespace: db_namespace.metadata.name,
-            fetchOpts:{
-                repo: "https://charts.bitnami.com/bitnami",
-            },
-            values: {
-                auth: {
-                    username: "temporal",
-                    password: "temporal",
-                },
-            }
+            allocatedStorage: 256,
+            availabilityZone: awsConfig.AvailabilityZones[0],
+            dbSubnetGroupName: awsConfig.RdsSubnetGroupName,
+            vpcSecurityGroupIds: [rdsSecurityGroup.id],
+            identifierPrefix: pulumi.getStack(),
+            engine: "mysql",
+            engineVersion: "8.0.36",
+            instanceClass: "db.t4g.large",
+            skipFinalSnapshot: true,
+            username: "temporal",
+            password: "temporal",
         },
-        { provider: cluster.Provider },
-    )
+    );
 
     installConfig = merge(
         {
             cassandra: {
-                enabled: false
-            },
-            mysql: {
                 enabled: false
             },
             prometheus: {
@@ -286,6 +298,9 @@ if (installConfig) {
                 enabled: false
             },
             postgresql: {
+                enabled: false
+            },
+            mysql: {
                 enabled: true
             },
             server: {
@@ -294,9 +309,9 @@ if (installConfig) {
                         default: {
                             driver: "sql",
                             sql: {
-                                driver: "postgres12",
-                                host: "postgresql.database",
-                                port: 5432,
+                                driver: "mysql8",
+                                host: rdsInstance.address,
+                                port: 3306,
                                 user: "temporal",
                                 password: "temporal",
                                 database: "temporal_persistence",
@@ -307,9 +322,9 @@ if (installConfig) {
                         visibility: {
                             driver: "sql",
                             sql: {
-                                driver: "postgres12",
-                                host: "postgresql.database",
-                                port: 5432,
+                                driver: "mysql8",
+                                host: rdsInstance.address,
+                                port: 3306,
                                 user: "temporal",
                                 password: "temporal",
                                 database: "temporal_visibility",
@@ -323,7 +338,10 @@ if (installConfig) {
                     "frontend.enableUpdateWorkflowExecution": [
                         { value: true }
                     ],
-                }
+                },
+                tolerations: [
+                    { key: "dedicated", operator: "Equal", value: "temporal", effect: "NoSchedule" }
+                ],
             },
         },
         installConfig,
@@ -360,7 +378,7 @@ if (installConfig) {
                 },
             ]
         },
-        { provider: cluster.Provider, dependsOn: postgres.ready },
+        { provider: cluster.Provider, dependsOn: rdsInstance },
     )
 
     const omesConfig = { ...config.requireObject<omes.Config>('Omes'), ...{ Temporal: temporalConfig } };
