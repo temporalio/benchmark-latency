@@ -339,6 +339,7 @@ if (installConfig) {
                         { value: true }
                     ],
                 },
+                nodeSelector: { dedicated: "temporal" },
                 tolerations: [
                     { key: "dedicated", operator: "Equal", value: "temporal", effect: "NoSchedule" }
                 ],
