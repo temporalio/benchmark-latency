@@ -76,3 +76,12 @@ Generally, 15 minutes should be enough time to get a feel for the latency perfor
 
 ## Useful Metrics
 
+The following SDK metrics are those that we believe are particularly useful when evaulating/comparing systems running this benchmark:
+
+    * [StartWorkflowExecution](https://docs.temporal.io/references/sdk-metrics#request_latency): Application code uses a StartWorkflowRequest in order to start a Workflow Execution on Temporal. This latency metric measures the amount of time an application will have to wait before the request to start a workflow is acknowledged.
+    * [SignalWorkflowExecution](https://docs.temporal.io/references/sdk-metrics#request_latency) Application code uses a SignalWorkflowExecution to inform a running Workflow Execution of an external event. This latency metric measures the amount of time an application will have to wait before the signal request is acknowledged.
+    * [Workflow End to End Latency](https://docs.temporal.io/references/sdk-metrics#workflow_endtoend_latency): While not comparable across different workloads, in the case where Temporal Clusters are running the same code this can give an indication of the effect of the system's latency. Improvements in all the latency metrics mentioned below will result in improvements in this end to end latency.
+    * [RespondWorkflowTaskCompleted](https://docs.temporal.io/references/sdk-metrics#request_latency): Workers reply to Temporal Server with the result of each Worfklow Task as a Workflow Execution makes progress. This latency measures the amount of time it takes for the Worker to receive an acknowledgement from Temporal Server.
+    * [RespondActivityTaskCompleted](https://docs.temporal.io/references/sdk-metrics#request_latency): Workers reply to Temporal Server with the result of each Activity Task. This latency measures the amount of time it takes for the Worker to receive an acknowledgement from Temporal Server.
+
+If you are benchmarking a self-hosted Temporal Cluster, server side metrics will be useful for investigating where there are bottlenecks and what might be improved to get lower latencies. Discussing those is out of scope for this project, but you can find some useful information on our blog: https://temporal.io/blog/scaling-temporal-the-basics.
