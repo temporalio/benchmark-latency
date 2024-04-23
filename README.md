@@ -1,60 +1,78 @@
 # Temporal Latency Benchmarks
 
-This repository provides a tool to measure latency for requests to a Temporal Server.
+This repository provides an automated way to run latency benchmarks against a Temporal Cluster. These can be run against [Temporal Cloud](https://temporal.io/cloud) or a self-hosted cluster.
 
-We use this tool to inform our users about the latencies they can expect when using Temporal Cloud or self-hosting. To help with infrastructure decisions we include latencies for hosting Temporal workers outside of a primary Temporal Cloud region, or with a different compute provider.
+Note the benchmark setup is not configured for load testing. The workload used is deliberately very light, in order to measure the latencies inherent in the system. A heavy load scenario could easily be measured with small adjustments to the code.
 
-Note that these measurements are not performance tests, but rather show any latency costs associated with deploying Temporal Workers/Clients outside of the primary Temporal Cloud regions.
-
-The requests which are measured are those which are most likely to affect the latency of an application starting or signalling workflows, or the throughput of an application's Temporal Workers.
-
-The code is provide publically here so that users can see how we measured the latencies, and replicate the experiments if they wish.
-
-We welcome any comments or suggestions on the metrics and approach used.
-
-## Requirements
+## Pre-requisites
 
 ### Pulumi
 
-This tool uses [Pulumi](https://www.pulumi.com/) to install workers into Kubernetes clusters, created using the managed Kubernetes services for the various Cloud providers.
+We use [Pulumi](https://www.pulumi.com/) to create a Kubernetes cluster to host the Temporal Workers and load test tool used for the benchmark (and optionally install a Temporal Cluster for you).
 
-To install on OS X you can use homebrew:
+If you don't already use Pulumi, please follow the guides linked to below to install and configure it for the Cloud Provider you would like to use. Note: You will not need Pulumi Cloud to run these benchmarks.
+
+Our tool supports AWS, GCP and Azure. Please note when following the Pulumi install docs that our tool uses the nodejs language runtime for Pulumi.
+    * [AWS](https://www.pulumi.com/docs/clouds/aws/get-started/begin/)
+    * [GCP](https://www.pulumi.com/docs/clouds/gcp/get-started/begin/)
+    * [Azure](https://www.pulumi.com/docs/clouds/azure/get-started/begin/)
+
+If you would like our tool to install a self-hosted Temporal Cluster to run the benchmarks against, please note this is currently only supported in AWS.
+
+Once Pulumi is installed, use `pulumi login --local` so that Pulumi knows to save state locally rather than to Pulumi Cloud.
+
+### Temporal Cluster credentials
+
+If you are testing Temporal Cloud (or an existing self-hosted Temporal Cluster which relies on mTLS), you will need the TLS certificates for the cluster you would like to benchmark.
+
+### Prometheus service
+
+The clusters used for the benchmarking are expected to be transient. For this reason, our tool does not install Prometheus into the benchmark cluster, but rather expects configuration for an external Prometheus instance. Metrics will be pushed to the external Prometheus instance using remote write. We have used Grafana Cloud's managed Prometheus service for this, but you can use any hosted Prometheus service (including one on your own infrastructure, as long as the benchmark cluster can connect to it).
+
+## Configuration
+
+You will need to create a [Pulumi Stack](https://www.pulumi.com/docs/concepts/stack/) to run the benchmarks. The stack is configured with details of the Cloud Provider, size/count of nodes to use for the Kubernetes cluster, and details of the Temporal Cluster to benchmark against.
+
+Example stack configurations are provided in the `examples/` directory:
+    * Pulumi.aws-temporal-cloud.yaml: Workers in AWS connecting to Temporal Cloud
+    * Pulumi.aws-self-hosted-temporal.yaml: Workers in AWS connecting to an existing self-hosted Temporal Cluster
+    * Pulumi.aws-ephemeral-self-hosted-temporal.yaml: Workers in AWS connecting to an ephemeral self-hosted Temporal Cluster built by our tool
+    * Pulumi.gcp-temporal-cloud.yaml: Workers in GCP connecting to Temporal Cloud
+    * Pulumi.gcp-self-hosted-temporal.yaml: Workers in GCP connecting to an existing self-hosted Temporal Cluster
+    * Pulumi.azure-temporal-cloud.yaml: Workers in Azure connecting to Temporal Cloud
+    * Pulumi.azure-self-hosted-temporal.yaml: Workers in Azure connecting to an existing self-hosted Temporal Cluster
+
+To use one of these examples, copy the file from the `examples/` directory to the root directory of this repo. Edit the file as required (they include comments to help you adjust them).
+
+## Running a benchmark
+
+Once you have configured a stack to your requirements, you can build all the required resources using Pulumi. To avoid lots of typing, we suggest you set a shell variable "stack" to the name of the stack you will be building. For example, if you're using the `examples/Pulumi.aws-temporal-cloud.yaml` stack configuration, the stack name is `aws-temporal-cloud`, so you can set the stack variable like so:
 
 ```shell
-brew install pulumi/tap/pulumi
+export stack=aws-temporal-cloud
 ```
 
-For other platforms, please see [Pulumi's install guide](https://www.pulumi.com/docs/install/).
+You may need to adjust the syntax for your shell if you are not using `bash`.
 
-Our Pulumi code uses Pulumi's Typescript SDK which relies on having Node.js installed. To install Node.js on OS X you can use homebrew:
+You can then bring the stack up and run the benchmark using:
 
 ```shell
-brew install nodejs
+pulumi stack -s $stack up
 ```
 
-For other platforms, please see [Node's installation docs](https://nodejs.org/en/download/package-manager/).
+That will show you a preview of resources that will be created. Hitting `return` will confirm, and Pulumi will then create the requires resources.
 
-### Cloud Provider Credentials
+When everything is built, the benchmark will start automatically and begin sending all SDK metrics to your Prometheus instance.
 
-In order to use the tools in this repository you will need to be able to authenticate to whichever cloud providers you would like to produce measurements for. Currently the tool supports AWS, GCP and Azure. To ease development of the tool, running against an existing Kubernetes cluster is also supported (for example Docker Deskop Kubernetes). You will only require credentials for those providers you would like to run the tests for.
+By default the benchmark is set to run for an hour to give a reasonable amount of data, but you do not need to wait that long if you'd prefer to end it sooner. When you are ready to bring the stack down, you can use:
 
-Each provider will have different methods for authentication, please see Pulumi's docs for the platforms you are interested in testing:
-* [AWS](https://www.pulumi.com/docs/clouds/aws/get-started/begin/#configure-pulumi-to-access-your-aws-account)
-* [GCP](https://www.pulumi.com/docs/clouds/gcp/get-started/begin/#configure-pulumi-to-access-your-google-cloud-account)
-* [Azure](https://www.pulumi.com/docs/clouds/azure/get-started/begin/#configure-pulumi-to-access-your-microsoft-azure-account)
+```shell
+pulumi stack -s $stack down
+```
 
-The provider accounts you use will need to have the required permissions to create a cluster using the providers' managed Kubernetes service, and then tear it down once finished. Pulumi will show relevant errors if some permissions are missing.
+This will show you a preview, and once confirmed, destroy all the resources that were created for the benchmarking in your Cloud Provider.
 
-### External Prometheus instance
+Generally, 15 minutes should be enough time to get a feel for the latency performance of a system, as this benchmark is not a load test which may change as load builds up. The default run time has been set to an hour so that if you are bringing up multiple clusters at the same time you have a better chance of at least 15 minute overlap between them (different configurations and Cloud Providers will vary in how quickly they come up). This makes comparison in Grafana or similar easier as the metrics will be in the same time ranges.
 
-As the clusters used for the latency measurements are designed to be temporary (to keep costs down), it's expected that you will bring your own external Prometheus instance. For our testing we used Grafana Cloud, which includes a hosted Prometheus setup. Any metric system that can accept Prometheus remote-write protocol is fine. It should also not be difficult to replace the Prometheus agent setup that is installed into the cluster with some other metric system, if you prefer.
+## Useful Metrics
 
-Configuring the tool for your external metric system is covered below.
-
-## Configuring clusters
-
-To get repeatable measurements the tool will build a new cluster for each environment you'd like to measure. Once the benchmark has run you can use the tool to tear down the cluster and any associated resources it built.
-
-For each environment you'd like to test you will need to create a Pulumi [stack](https://www.pulumi.com/docs/concepts/stack/). Each stack will tell the tool which provider and region the test should be run in, and how many/which type of nodes to use for the cluster.
-
-This repo includes some example stack configuration files for you to edit as appropriate. You can find these templates in the [`examples/`](./examples) directory.
