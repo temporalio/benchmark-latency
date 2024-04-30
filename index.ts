@@ -16,15 +16,11 @@ import { dump } from 'js-yaml';
 import dedent from 'dedent';
 import { merge } from 'ts-deepmerge';
 
-import * as fs from 'fs';
-
 let config = new pulumi.Config();
 const temporalConfig = config.requireObject<types.TemporalConfig>('Temporal');
 
-function createCluster(name: string, config: types.ClusterConfig): Cluster {
-    if (config.Local) {
-        return localCluster(name, config)
-    } else if (config.AWS) {
+function createCluster(name: string, config: types.KubernetesConfig): Cluster {
+    if (config.AWS) {
         return eksCluster(name, config)
     } else if (config.GCP) {
         return gksCluster(name, config)
@@ -41,20 +37,7 @@ interface Cluster {
     SecurityGroup?: pulumi.Output<string>
 }
 
-function localCluster(name: string, config: types.ClusterConfig): Cluster {
-    if (config.Local == undefined) {
-        throw("localCluster needs Local configuration")
-    }
-
-    const kubeconfig = fs.readFileSync(config.Local.kubeconfig, 'utf8') 
-
-    return {
-        Provider: new k8s.Provider(name, { kubeconfig }),
-        Kubeconfig:  pulumi.output(kubeconfig),
-    }
-}
-
-function eksCluster(name: string, config: types.ClusterConfig): Cluster {
+function eksCluster(name: string, config: types.KubernetesConfig): Cluster {
     if (config.AWS == undefined) {
         throw("eksCluster needs AWS configuration")
     }
@@ -99,7 +82,7 @@ function eksCluster(name: string, config: types.ClusterConfig): Cluster {
     }
 }
 
-function gksCluster(name: string, config: types.ClusterConfig): Cluster {
+function gksCluster(name: string, config: types.KubernetesConfig): Cluster {
     const engineVersion = gcp.container.getEngineVersions().then(v => v.latestMasterVersion);
 
     const cluster = new gcp.container.Cluster(name, {
@@ -122,25 +105,25 @@ function gksCluster(name: string, config: types.ClusterConfig): Cluster {
     const kubeconfig = pulumi.
         all([ cluster.name, cluster.endpoint, cluster.masterAuth ]).
         apply(([ name, endpoint, masterAuth ]) => {
-            const context = `${gcp.config.project}_${gcp.config.zone}_${name}`;
+            const context = `gke_${gcp.config.project}_${gcp.config.zone}_${name}`;
             return dedent(`
                 apiVersion: v1
                 clusters:
-                - cluster:
+                - name: ${context}
+                  cluster:
                     certificate-authority-data: ${masterAuth.clusterCaCertificate}
                     server: https://${endpoint}
-                name: ${context}
                 contexts:
-                - context:
+                - name: ${context}
+                  context:
                     cluster: ${context}
                     user: ${context}
-                name: ${context}
                 current-context: ${context}
                 kind: Config
                 preferences: {}
                 users:
                 - name: ${context}
-                user:
+                  user:
                     exec:
                     apiVersion: client.authentication.k8s.io/v1beta1
                     command: gke-gcloud-auth-plugin
@@ -156,7 +139,7 @@ function gksCluster(name: string, config: types.ClusterConfig): Cluster {
     }
 }
 
-function aksCluster(name: string, config: types.ClusterConfig): Cluster {
+function aksCluster(name: string, config: types.KubernetesConfig): Cluster {
     const resourceGroup = new resources.ResourceGroup(name);
     const adApp = new azuread.Application(name, {
         displayName: name,
@@ -202,8 +185,8 @@ function aksCluster(name: string, config: types.ClusterConfig): Cluster {
     }
 }
 
-const clusterConfig = config.requireObject<types.ClusterConfig>('Cluster')
-const cluster = createCluster(pulumi.getStack(), clusterConfig);
+const k8sConfig = config.requireObject<types.KubernetesConfig>('Kubernetes')
+const cluster = createCluster(pulumi.getStack(), k8sConfig);
 
 const monitoringConfig = config.requireObject<types.MonitoringConfig>('Monitoring')
 const monitoring = new k8s.helm.v3.Chart(
@@ -247,11 +230,11 @@ const monitoring = new k8s.helm.v3.Chart(
 
 let installConfig = temporalConfig.SelfHosted
 if (installConfig) {
-    if (clusterConfig.AWS == undefined) {
+    if (k8sConfig.AWS == undefined) {
         throw new Error("Self-hosted setup is only supported on AWS currently")
     }
 
-    const awsConfig = clusterConfig.AWS
+    const awsConfig = k8sConfig.AWS
 
     const rdsSecurityGroup = new aws.ec2.SecurityGroup(pulumi.getStack() + "-rds", {
         vpcId: awsConfig.VpcId,

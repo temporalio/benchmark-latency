@@ -1,9 +1,5 @@
 import * as pulumi from "@pulumi/pulumi";
 
-export interface LocalConfig {
-    kubeconfig: string;
-}
-
 export interface AWSConfig {
     Region: string;
     VpcId: string;
@@ -27,8 +23,7 @@ export interface TemporalConfig {
     TaskQueue: string;
 }
 
-export interface ClusterConfig {
-    Local?: LocalConfig
+export interface KubernetesConfig {
     AWS?: AWSConfig
     GCP?: boolean
     Azure: boolean

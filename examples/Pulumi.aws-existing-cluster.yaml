@@ -1,0 +1,89 @@
+# Encryption salt for Pulumi
+encryptionsalt: v1:O18X/auAAak=:v1:AcS+/jVAkb+1lGrj:8QZLIzYEr/KIRx1RM1nj7a7F7auk7g==
+
+config:
+  # The template to use for Pulumi
+  pulumi:template: kubernetes-go
+
+  # AWS configuration
+  aws:assumeRole:
+    # The ARN of the role to assume
+    roleArn: arn:aws:iam::XXXX:role/XXXX
+  aws:defaultTags:
+    # Default tags to apply to all AWS resources
+    # These are optional.
+    tags:
+      Stack: aws-existing-cluster
+  # The AWS region
+  aws:region: us-west-2
+
+  # Configuration for the temporal benchmarks latency Kubernetes cluster
+  temporal-benchmarks-latency:Kubernetes:
+    AWS:
+      # The AWS region for the cluster
+      Region: us-west-2
+      # The availability zones for the cluster
+      AvailabilityZones: ["us-west-2a", "us-west-2b", "us-west-2c"]
+      # The private subnet IDs for the cluster
+      PrivateSubnetIds: ["subnet-XXXX", "subnet-XXXX", "subnet-XXXX"]
+      # The public subnet IDs for the cluster
+      PublicSubnetIds: ["subnet-XXXX", "subnet-XXXX", "subnet-XXXX"]
+      # The role for the cluster.
+      Role: XXXX
+      # The VPC ID for the cluster
+      VpcId: "vpc-XXXX"
+    # The number of nodes in the cluster
+    NodeCount: 1
+    # The type of nodes in the cluster
+    NodeType: m5.2xlarge
+
+  # Configuration for the temporal benchmarks latency monitoring
+  temporal-benchmarks-latency:Monitoring:
+    ExternalServices:
+      prometheus:
+        # The host for Prometheus
+        host: "https://XXXX"
+        basicAuth:
+            # The username for basic authentication
+            username: "XXXX"
+            # The password for basic authentication
+            password: "XXXX"
+
+  # Configuration for Temporal
+  temporal-benchmarks-latency:Temporal:
+    # The host for Temporal
+    Host: latency-test.temporal-dev.temporal.cloud:7233
+    # The namespace for Temporal
+    Namespace: latency-test.temporal-dev
+    # The task queue for Temporal
+    TaskQueue: benchmark-aws
+    # The TLS key for Temporal
+    TlsKey: ./ssl/client.key
+    # The TLS certificate for Temporal
+    TlsCert: ./ssl/client.pem
+
+  # Configuration for the temporal benchmarks latency Omes
+  temporal-benchmarks-latency:Omes:
+    Scenario:
+      # The number of concurrent workflows for the scenario
+      ConcurrentWorkflows: 1
+      # The number of pods for the scenario
+      Pods: 1
+      # The CPU for the scenario
+      CPU: 1
+      # The memory for the scenario
+      Memory: 100M
+    Workers:
+      # The number of pods for the workers
+      Pods: 2
+      # The CPU for the workers
+      CPU: 1
+      # The memory for the workers
+      Memory: 100M
+      # The number of activity pollers
+      ActivityPollers: 100
+      # The number of workflow pollers
+      WorkflowPollers: 100
+    # The version of the Omes image to use
+    Version: go-1.25.2-0.20231129171107-288a04f72145
+  

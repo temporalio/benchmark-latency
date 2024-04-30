@@ -19,7 +19,13 @@ Our tool supports AWS, GCP and Azure. Please note when following the Pulumi inst
 
 If you would like our tool to install a self-hosted Temporal Cluster to run the benchmarks against, please note this is currently only supported in AWS.
 
-Once Pulumi is installed, use `pulumi login --local` so that Pulumi knows to save state locally rather than to Pulumi Cloud.
+Once Pulumi is installed, configure Pulumi to save state locally rather than to Pulumi Cloud.
+
+```shell
+pulumi login --local
+```
+
+Our tool uses a few Pulumi plugins to talk to AWS, GCP and Azure. Please install these plugins by running `npm install` after Pulumi is installed.
 
 ### Temporal Cluster credentials
 
@@ -34,13 +40,10 @@ The clusters used for the benchmarking are expected to be transient. For this re
 You will need to create a [Pulumi Stack](https://www.pulumi.com/docs/concepts/stack/) to run the benchmarks. The stack is configured with details of the Cloud Provider, size/count of nodes to use for the Kubernetes cluster, and details of the Temporal Cluster to benchmark against.
 
 Example stack configurations are provided in the `examples/` directory:
-    * Pulumi.aws-temporal-cloud.yaml: Workers in AWS connecting to Temporal Cloud
-    * Pulumi.aws-self-hosted-temporal.yaml: Workers in AWS connecting to an existing self-hosted Temporal Cluster
-    * Pulumi.aws-ephemeral-self-hosted-temporal.yaml: Workers in AWS connecting to an ephemeral self-hosted Temporal Cluster built by our tool
-    * Pulumi.gcp-temporal-cloud.yaml: Workers in GCP connecting to Temporal Cloud
-    * Pulumi.gcp-self-hosted-temporal.yaml: Workers in GCP connecting to an existing self-hosted Temporal Cluster
-    * Pulumi.azure-temporal-cloud.yaml: Workers in Azure connecting to Temporal Cloud
-    * Pulumi.azure-self-hosted-temporal.yaml: Workers in Azure connecting to an existing self-hosted Temporal Cluster
+    * Pulumi.aws-existing-cluster.yaml: Workers in AWS connecting to an existing cluster or Temporal Cloud
+    * Pulumi.aws-ephemeral-temporal.yaml: Workers in AWS connecting to an ephemeral self-hosted Temporal Cluster built by our tool
+    * Pulumi.gcp-existing-cluster.yaml: Workers in GCP connecting to an existing cluster or Temporal Cloud
+    * Pulumi.azure-existing-cluster.yaml: Workers in Azure connecting to an existing cluster or Temporal Cloud
 
 To use one of these examples, copy the file from the `examples/` directory to the root directory of this repo. Edit the file as required (they include comments to help you adjust them).
 
@@ -49,7 +52,7 @@ To use one of these examples, copy the file from the `examples/` directory to th
 Once you have configured a stack to your requirements, you can build all the required resources using Pulumi. To avoid lots of typing, we suggest you set a shell variable "stack" to the name of the stack you will be building. For example, if you're using the `examples/Pulumi.aws-temporal-cloud.yaml` stack configuration, the stack name is `aws-temporal-cloud`, so you can set the stack variable like so:
 
 ```shell
-export stack=aws-temporal-cloud
+export stack=aws-existing-cluster
 ```
 
 You may need to adjust the syntax for your shell if you are not using `bash`.
