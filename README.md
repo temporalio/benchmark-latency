@@ -13,9 +13,9 @@ We use [Pulumi](https://www.pulumi.com/) to create a Kubernetes cluster to host 
 If you don't already use Pulumi, please follow the guides linked to below to install and configure it for the Cloud Provider you would like to use. Note: You will not need Pulumi Cloud to run these benchmarks.
 
 Our tool supports AWS, GCP and Azure. Please note when following the Pulumi install docs that our tool uses the nodejs language runtime for Pulumi.
-    * [AWS](https://www.pulumi.com/docs/clouds/aws/get-started/begin/)
-    * [GCP](https://www.pulumi.com/docs/clouds/gcp/get-started/begin/)
-    * [Azure](https://www.pulumi.com/docs/clouds/azure/get-started/begin/)
+* [AWS](https://www.pulumi.com/docs/clouds/aws/get-started/begin/)
+* [GCP](https://www.pulumi.com/docs/clouds/gcp/get-started/begin/)
+* [Azure](https://www.pulumi.com/docs/clouds/azure/get-started/begin/)
 
 If you would like our tool to install a self-hosted Temporal Cluster to run the benchmarks against, please note this is currently only supported in AWS.
 
@@ -40,10 +40,10 @@ The clusters used for the benchmarking are expected to be transient. For this re
 You will need to create a [Pulumi Stack](https://www.pulumi.com/docs/concepts/stack/) to run the benchmarks. The stack is configured with details of the Cloud Provider, size/count of nodes to use for the Kubernetes cluster, and details of the Temporal Cluster to benchmark against.
 
 Example stack configurations are provided in the `examples/` directory:
-    * Pulumi.aws-existing-cluster.yaml: Workers in AWS connecting to an existing cluster or Temporal Cloud
-    * Pulumi.aws-ephemeral-temporal.yaml: Workers in AWS connecting to an ephemeral self-hosted Temporal Cluster built by our tool
-    * Pulumi.gcp-existing-cluster.yaml: Workers in GCP connecting to an existing cluster or Temporal Cloud
-    * Pulumi.azure-existing-cluster.yaml: Workers in Azure connecting to an existing cluster or Temporal Cloud
+* `Pulumi.aws-existing-cluster.yaml`: Workers in AWS connecting to an existing cluster or Temporal Cloud
+* `Pulumi.aws-ephemeral-temporal.yaml`: Workers in AWS connecting to an ephemeral self-hosted Temporal Cluster built by our tool
+* `Pulumi.gcp-existing-cluster.yaml`: Workers in GCP connecting to an existing cluster or Temporal Cloud
+* `Pulumi.azure-existing-cluster.yaml`: Workers in Azure connecting to an existing cluster or Temporal Cloud
 
 To use one of these examples, copy the file from the `examples/` directory to the root directory of this repo. Edit the file as required (they include comments to help you adjust them).
 
@@ -81,15 +81,15 @@ Generally, 15 minutes should be enough time to get a feel for the latency perfor
 
 The following SDK metrics are those that we believe are particularly useful when evaulating/comparing systems running this benchmark:
 
-    * [StartWorkflowExecution](https://docs.temporal.io/references/sdk-metrics#request_latency): Application code uses a StartWorkflowRequest in order to start a Workflow Execution on Temporal. This latency metric measures the amount of time an application will have to wait before the request to start a workflow is acknowledged.
-    * [SignalWorkflowExecution](https://docs.temporal.io/references/sdk-metrics#request_latency) Application code uses a SignalWorkflowExecution to inform a running Workflow Execution of an external event. This latency metric measures the amount of time an application will have to wait before the signal request is acknowledged.
-    * [Workflow End to End Latency](https://docs.temporal.io/references/sdk-metrics#workflow_endtoend_latency): While not comparable across different workloads, in the case where Temporal Clusters are running the same code this can give an indication of the effect of the system's latency. Improvements in all the latency metrics mentioned below will result in improvements in this end to end latency.
-    * [RespondWorkflowTaskCompleted](https://docs.temporal.io/references/sdk-metrics#request_latency): Workers reply to Temporal Server with the result of each Worfklow Task as a Workflow Execution makes progress. This latency measures the amount of time it takes for the Worker to receive an acknowledgement from Temporal Server.
-    * [RespondActivityTaskCompleted](https://docs.temporal.io/references/sdk-metrics#request_latency): Workers reply to Temporal Server with the result of each Activity Task. This latency measures the amount of time it takes for the Worker to receive an acknowledgement from Temporal Server.
+* [StartWorkflowExecution](https://docs.temporal.io/references/sdk-metrics#request_latency): Application code uses a StartWorkflowRequest in order to start a Workflow Execution on Temporal. This latency metric measures the amount of time an application will have to wait before the request to start a workflow is acknowledged.
+* [SignalWorkflowExecution](https://docs.temporal.io/references/sdk-metrics#request_latency) Application code uses a SignalWorkflowExecution to inform a running Workflow Execution of an external event. This latency metric measures the amount of time an application will have to wait before the signal request is acknowledged.
+* [Workflow End to End Latency](https://docs.temporal.io/references/sdk-metrics#workflow_endtoend_latency): While not comparable across different workloads, in the case where Temporal Clusters are running the same code this can give an indication of the effect of the system's latency. Improvements in all the latency metrics mentioned below will result in improvements in this end to end latency.
+* [RespondWorkflowTaskCompleted](https://docs.temporal.io/references/sdk-metrics#request_latency): Workers reply to Temporal Server with the result of each Worfklow Task as a Workflow Execution makes progress. This latency measures the amount of time it takes for the Worker to receive an acknowledgement from Temporal Server.
+* [RespondActivityTaskCompleted](https://docs.temporal.io/references/sdk-metrics#request_latency): Workers reply to Temporal Server with the result of each Activity Task. This latency measures the amount of time it takes for the Worker to receive an acknowledgement from Temporal Server.
 
 In order to know that the system isn't being overloaded (which would affect baseline latency), you can check the following metrics:
 
-    * [WorkflowTaskScheduleToStartLatency](https://docs.temporal.io/references/sdk-metrics#workflow_task_schedule_to_start_latency): This metric measures the latency between a Workflow Task being created and being executed on a Worker. A properly tuned system with low load should have a figure under 150ms here, ideally closer to 50ms. If your latency is too high here, consider adding more Workflow Task Pollers on your Workers, or adding more Workers, via the stack configuration.
-    * [WorkflowTaskScheduleToStartLatency](https://docs.temporal.io/references/sdk-metrics#activity_task_schedule_to_start_latency): This metric measures the latency between an Activity Task being created and being executed on a Worker. A properly tuned system with low load should have a figure under 150ms here, ideally closer to 50ms. If your latency is too high here, consider adding more Actitivity Task Pollers on your Workers, or adding more Workers, via the stack configuration.
+* [WorkflowTaskScheduleToStartLatency](https://docs.temporal.io/references/sdk-metrics#workflow_task_schedule_to_start_latency): This metric measures the latency between a Workflow Task being created and being executed on a Worker. A properly tuned system with low load should have a figure under 150ms here, ideally closer to 50ms. If your latency is too high here, consider adding more Workflow Task Pollers on your Workers, or adding more Workers, via the stack configuration.
+* [WorkflowTaskScheduleToStartLatency](https://docs.temporal.io/references/sdk-metrics#activity_task_schedule_to_start_latency): This metric measures the latency between an Activity Task being created and being executed on a Worker. A properly tuned system with low load should have a figure under 150ms here, ideally closer to 50ms. If your latency is too high here, consider adding more Actitivity Task Pollers on your Workers, or adding more Workers, via the stack configuration.
 
 If you are benchmarking a self-hosted Temporal Cluster, server side metrics will be useful for investigating where there are bottlenecks and what might be improved to get lower latencies. Discussing those is out of scope for this project, but you can find some useful information on our blog: https://temporal.io/blog/scaling-temporal-the-basics.
