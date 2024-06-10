@@ -13,7 +13,7 @@
         "@pulumi/eks": "^2.3.0",
         "@pulumi/gcp": "^7.2.2",
         "@pulumi/kubernetes": "^4.11.0",
-        "@pulumi/pulumi": "^3.0.0",
+        "@pulumi/pulumi": "^3.119.0",
         "@pulumi/tls": "^5.0.0",
         "@types/js-yaml": "^4.0.5",
         "dedent": "^1.5.1",
